@@ -1,4 +1,4 @@
-"""Knip unused-code runner for TypeScript projects."""
+"""Knip unused-code runner for the TypeScript frontend."""
 
 from __future__ import annotations
 
@@ -18,15 +18,10 @@ KIND_LABELS = {
 }
 
 
-def run_knip(root: Path, knip_config: dict) -> list[str]:
-    """Run Knip and return errors.
-
-    knip_config keys:
-        directory – directory containing node_modules/.bin/knip (relative to root)
-    """
-    directory = knip_config.get("directory", ".")
-    target_dir = root / directory
-    knip_bin = target_dir / "node_modules" / ".bin" / "knip"
+def run_knip(root: Path) -> list[str]:
+    """Run Knip on the TypeScript frontend and return errors."""
+    frontend_dir = root / "frontend"
+    knip_bin = frontend_dir / "node_modules" / ".bin" / "knip"
     if not knip_bin.exists():
         return []
 
@@ -34,7 +29,7 @@ def run_knip(root: Path, knip_config: dict) -> list[str]:
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True,
-            cwd=str(target_dir), timeout=60,
+            cwd=str(frontend_dir), timeout=60,
         )
     except (OSError, subprocess.TimeoutExpired):
         return []
@@ -47,14 +42,20 @@ def run_knip(root: Path, knip_config: dict) -> list[str]:
     errors: list[str] = []
     for entry in data.get("issues", []):
         filepath = entry.get("file", "")
-        rel = f"{directory}/{filepath}" if directory != "." else filepath
+        rel = f"frontend/{filepath}"
         for kind, label in KIND_LABELS.items():
             for item in entry.get(kind, []):
-                name = item.get("name", "")
-                line = item.get("line", 1)
-                col = item.get("col", 1)
+                if isinstance(item, dict):
+                    name = item.get("name", "")
+                    line = item.get("line", 1)
+                    col = item.get("col", 1)
+                elif isinstance(item, str):
+                    name = item
+                    line, col = 1, 1
+                else:
+                    continue
                 errors.append(
                     f"{rel}:{line}:{col}: error: "
-                    f"{label} '{name}' [knip]"
+                    f"[knip] {label} '{name}'"
                 )
     return errors
