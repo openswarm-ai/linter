@@ -21,21 +21,29 @@ pip install "swarm-lint[all]"      # both of the above
 ## Quick start
 
 ```bash
-# scaffold a .swarm-lint.json config in your project
+# interactive setup wizard — the fastest way to get going
+swarm-lint setup
+
+# or scaffold a default config non-interactively
 swarm-lint init --root /path/to/project
 
 # run all checks once
 swarm-lint check --root /path/to/project
 
 # watch mode — re-checks on every file save
-swarm-lint --watch --root /path/to/project
+swarm-lint check --watch --root /path/to/project
 ```
 
 ## CLI reference
 
+### `swarm-lint setup`
+
+Interactive wizard that auto-detects your project structure (Python dirs, TypeScript dirs, virtual environments, `node_modules`) and walks you through choosing checks, setting rules, and scaffolding config files — all from the terminal.
+
+### `swarm-lint check`
+
 ```
-swarm-lint [check] [--root DIR] [--config FILE] [--watch] [--no-color]
-swarm-lint init    [--root DIR] [--with-tasks] [--with-pyright] [--with-whitelist]
+swarm-lint check [--root DIR] [--config FILE] [--watch/--no-watch] [--color/--no-color]
 ```
 
 | Flag | Description |
@@ -45,9 +53,15 @@ swarm-lint init    [--root DIR] [--with-tasks] [--with-pyright] [--with-whitelis
 | `--watch` | Watch for file changes and re-lint continuously |
 | `--no-color` | Disable colored terminal output |
 
+Running `swarm-lint` with no subcommand is equivalent to `swarm-lint check`.
+
 ### `swarm-lint init`
 
-Scaffolds a `.swarm-lint.json` config file into the target directory. Optional flags:
+```
+swarm-lint init [--root DIR] [--with-tasks] [--with-pyright] [--with-whitelist]
+```
+
+Non-interactive scaffolding — drops a `.swarm-lint.json` config file into the target directory. Optional flags:
 
 | Flag | Creates |
 |------|---------|
@@ -56,6 +70,23 @@ Scaffolds a `.swarm-lint.json` config file into the target directory. Optional f
 | `--with-whitelist` | `vulture_whitelist.py` stub |
 
 The command is non-destructive — it skips files that already exist.
+
+### `swarm-lint config`
+
+Manage configuration without hand-editing JSON.
+
+```bash
+# pretty-print the resolved config (defaults + your overrides)
+swarm-lint config show
+
+# set a value using dot-path notation
+swarm-lint config set rules.max-file-lines 300
+swarm-lint config set vulture.venv_path backend/.venv
+
+# toggle checks on/off
+swarm-lint config enable vulture
+swarm-lint config disable eslint
+```
 
 ## Configuration
 
@@ -118,7 +149,7 @@ Your config is **deep-merged** on top of defaults — you only need to override 
 
 ## VS Code integration
 
-Run `swarm-lint init --with-tasks` to create a `.vscode/tasks.json` that:
+Run `swarm-lint setup` (or `swarm-lint init --with-tasks`) to create a `.vscode/tasks.json` that:
 
 - Auto-starts `swarm-lint --watch` when the workspace opens
 - Feeds errors into the **Problems panel** via problem matchers

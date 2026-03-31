@@ -1,13 +1,11 @@
-#!/usr/bin/env python3
 """swarm-lint CLI: orchestrates structural checks, dead-code detection, and lint tools."""
 
-from __future__ import annotations
-
-import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+
+import typer
 
 from swarm_lint.checks import is_excluded, is_excepted
 from swarm_lint.checks.structural import check_file_lines, check_folder_items, check_nested_imports
@@ -154,54 +152,134 @@ def watch_loop(root: Path, config: dict[str, Any], *, color: bool) -> None:
         print_results(*run_checks(root, config), color=color)
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="swarm-lint",
-        description="Unified structural linter for Python + TypeScript projects",
+# ---------------------------------------------------------------------------
+# Typer app
+# ---------------------------------------------------------------------------
+
+app = typer.Typer(
+    help="Unified structural linter for Python + TypeScript projects.",
+    invoke_without_command=True,
+    no_args_is_help=False,
+)
+
+config_app = typer.Typer(help="View and modify configuration.")
+app.add_typer(config_app, name="config")
+
+
+def _run_check(
+    root_str: str,
+    config_path: Optional[str],
+    watch: bool,
+    color: bool,
+) -> None:
+    root = Path(root_str).resolve()
+    explicit_config = Path(config_path) if config_path else None
+    cfg = load_config(root, explicit_config)
+    use_color = color and _supports_color()
+
+    if watch:
+        watch_loop(root, cfg, color=use_color)
+    else:
+        results = run_checks(root, cfg)
+        print_results(*results, color=use_color)
+        raise typer.Exit(code=1 if any(results) else 0)
+
+
+@app.callback(invoke_without_command=True)
+def _main(
+    ctx: typer.Context,
+    root: str = typer.Option(".", help="Project root directory"),
+    config: Optional[str] = typer.Option(None, help="Path to config JSON file"),
+    watch: bool = typer.Option(False, "--watch/--no-watch", help="Watch for file changes and re-lint"),
+    color: bool = typer.Option(True, "--color/--no-color", help="Colored terminal output"),
+) -> None:
+    """Unified structural linter for Python + TypeScript projects."""
+    if ctx.invoked_subcommand is not None:
+        return
+    _run_check(root, config, watch, color)
+
+
+@app.command()
+def check(
+    root: str = typer.Option(".", help="Project root directory"),
+    config: Optional[str] = typer.Option(None, help="Path to config JSON file"),
+    watch: bool = typer.Option(False, "--watch/--no-watch", help="Watch for file changes and re-lint"),
+    color: bool = typer.Option(True, "--color/--no-color", help="Colored terminal output"),
+) -> None:
+    """Run lint checks (default when no subcommand is given)."""
+    _run_check(root, config, watch, color)
+
+
+@app.command()
+def setup(
+    root: str = typer.Option(".", help="Project root directory"),
+) -> None:
+    """Interactive setup wizard — configure swarm-lint for your project."""
+    from swarm_lint.setup_cmd import run_setup
+    run_setup(Path(root).resolve())
+
+
+@app.command("init")
+def init_cmd(
+    root: str = typer.Option(".", help="Target directory"),
+    with_tasks: bool = typer.Option(False, "--with-tasks/--without-tasks", help="Also create .vscode/tasks.json"),
+    with_pyright: bool = typer.Option(False, "--with-pyright/--without-pyright", help="Also create pyrightconfig.json"),
+    with_whitelist: bool = typer.Option(
+        False, "--with-whitelist/--without-whitelist", help="Also create vulture_whitelist.py",
+    ),
+) -> None:
+    """Scaffold a .swarm-lint.json config file (non-interactive)."""
+    from swarm_lint.init_cmd import run_init
+    run_init(
+        root=Path(root).resolve(),
+        with_tasks=with_tasks,
+        with_pyright=with_pyright,
+        with_whitelist=with_whitelist,
     )
-    sub = parser.add_subparsers(dest="command")
 
-    check_parser = sub.add_parser("check", help="Run lint checks (default)")
-    for p in (parser, check_parser):
-        p.add_argument("--root", type=str, default=".", help="Project root directory")
-        p.add_argument("--config", type=str, default=None, help="Path to config JSON file")
-        p.add_argument("--watch", action="store_true", help="Watch for file changes and re-lint")
-        p.add_argument("--no-color", action="store_true", help="Disable colored output")
 
-    init_parser = sub.add_parser("init", help="Scaffold a .swarm-lint.json config file")
-    init_parser.add_argument("--root", type=str, default=".", help="Target directory")
-    init_parser.add_argument("--with-tasks", action="store_true", help="Also create .vscode/tasks.json")
-    init_parser.add_argument("--with-pyright", action="store_true", help="Also create pyrightconfig.json")
-    init_parser.add_argument("--with-whitelist", action="store_true", help="Also create vulture_whitelist.py")
+@config_app.command("show")
+def config_show(
+    root: str = typer.Option(".", help="Project root directory"),
+) -> None:
+    """Display the resolved configuration."""
+    from swarm_lint.config_cmd import show_config
+    show_config(Path(root).resolve())
 
-    return parser
+
+@config_app.command("set")
+def config_set(
+    key: str = typer.Argument(help="Dot-path key (e.g. rules.max-file-lines)"),
+    value: str = typer.Argument(help="Value to set"),
+    root: str = typer.Option(".", help="Project root directory"),
+) -> None:
+    """Set a config value using dot-path notation."""
+    from swarm_lint.config_cmd import set_config_value
+    set_config_value(Path(root).resolve(), key, value)
+
+
+@config_app.command("enable")
+def config_enable(
+    check_name: str = typer.Argument(help="Check to enable"),
+    root: str = typer.Option(".", help="Project root directory"),
+) -> None:
+    """Enable a lint check."""
+    from swarm_lint.config_cmd import toggle_check
+    toggle_check(Path(root).resolve(), check_name, enable=True)
+
+
+@config_app.command("disable")
+def config_disable(
+    check_name: str = typer.Argument(help="Check to disable"),
+    root: str = typer.Option(".", help="Project root directory"),
+) -> None:
+    """Disable a lint check."""
+    from swarm_lint.config_cmd import toggle_check
+    toggle_check(Path(root).resolve(), check_name, enable=False)
 
 
 def main() -> None:
-    parser = _build_parser()
-    args = parser.parse_args()
-
-    if args.command == "init":
-        from swarm_lint.init_cmd import run_init  # noqa: nested — keep startup fast
-        run_init(
-            root=Path(args.root).resolve(),
-            with_tasks=args.with_tasks,
-            with_pyright=args.with_pyright,
-            with_whitelist=args.with_whitelist,
-        )
-        return
-
-    root = Path(args.root).resolve()
-    explicit_config = Path(args.config) if args.config else None
-    config = load_config(root, explicit_config)
-    color = not args.no_color and _supports_color()
-
-    if args.watch:
-        watch_loop(root, config, color=color)
-    else:
-        results = run_checks(root, config)
-        print_results(*results, color=color)
-        sys.exit(1 if any(results) else 0)
+    app()
 
 
 if __name__ == "__main__":
