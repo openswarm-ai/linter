@@ -124,7 +124,8 @@ def run_setup(root: Path) -> None:
             parts.append(f"Python in [bold]{', '.join(py_dirs)}[/bold]")
         if ts_dirs:
             parts.append(f"TypeScript in [bold]{', '.join(ts_dirs)}[/bold]")
-        console.print(f"  Detected: {' \u00b7 '.join(parts)}")
+        sep = " \u00b7 "
+        console.print(f"  Detected: {sep.join(parts)}")
         console.print()
 
     # --- choose checks ---
