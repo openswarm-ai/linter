@@ -4,3 +4,13 @@ src/swarm_lint.egg-info/
 .venv/
 # Pycache
 __pycache__/
+# Dist
+dist/
+# Build
+build/
+# Egg info
+*.egg-info/
+# Wheel
+*.whl
+# Tar.gz
+*.tar.gz
