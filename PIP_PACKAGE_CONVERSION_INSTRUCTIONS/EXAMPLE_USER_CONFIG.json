@@ -1,0 +1,46 @@
+{
+  "_comment": "This is an EXAMPLE of what a user's .swarm-lint.json would look like (specifically, what the original debugger project would use). Users only override what differs from defaults.",
+
+  "rules": {
+    "vulture-min-confidence": 1,
+    "vulture-error-threshold": 1
+  },
+
+  "exclude": [
+    "node_modules",
+    ".venv",
+    "dist",
+    "build",
+    "__pycache__",
+    ".git",
+    ".cursor",
+    ".vscode",
+    "uv-bin",
+    "data",
+    "public",
+    "readme_assets",
+    "openswarm_debug.egg-info",
+    "frontend/src/assets"
+  ],
+
+  "exceptions": {
+    "max-file-lines": ["openswarm_debug.egg-info/**"],
+    "max-folder-items": ["frontend"],
+    "no-nested-imports": []
+  },
+
+  "vulture": {
+    "targets": ["backend", "debug.py"],
+    "venv_path": "backend/.venv",
+    "exclude": ".venv,__pycache__,data,uv-bin",
+    "whitelist": "vulture_whitelist.py"
+  },
+
+  "eslint": {
+    "directory": "frontend"
+  },
+
+  "knip": {
+    "directory": "frontend"
+  }
+}

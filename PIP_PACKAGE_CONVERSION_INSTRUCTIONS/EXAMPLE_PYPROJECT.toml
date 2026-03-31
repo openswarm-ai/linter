@@ -1,0 +1,33 @@
+# This is the target pyproject.toml for the swarm-lint pip package.
+# Place it at the root of the linter repo (alongside the src/ directory).
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swarm-lint"
+version = "0.1.0"
+description = "Unified structural linter for Python + TypeScript projects"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+watch = ["watchfiles"]
+vulture = ["vulture"]
+all = ["watchfiles", "vulture"]
+
+[project.scripts]
+swarm-lint = "swarm_lint.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+swarm_lint = [
+    "defaults/*.json",
+    "defaults/*.py",
+    "templates/*.json",
+]

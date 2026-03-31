@@ -1,0 +1,56 @@
+{
+  "_comment": "This is the GENERIC default config that ships with the package. No project-specific values. Users override via .swarm-lint.json in their project root.",
+
+  "enabled": {
+    "max-file-lines": true,
+    "max-folder-items": true,
+    "no-nested-imports": true,
+    "vulture": true,
+    "eslint": true,
+    "knip": true
+  },
+
+  "rules": {
+    "max-file-lines": 250,
+    "max-folder-items": 7,
+    "vulture-min-confidence": 80,
+    "vulture-error-threshold": 90,
+    "no-nested-imports": true
+  },
+
+  "include_extensions": [".py", ".ts", ".tsx", ".js", ".jsx"],
+
+  "exclude": [
+    "node_modules",
+    ".venv",
+    "dist",
+    "build",
+    "__pycache__",
+    ".git",
+    ".cursor",
+    ".vscode"
+  ],
+
+  "exceptions": {
+    "max-file-lines": [],
+    "max-folder-items": [],
+    "no-nested-imports": [],
+    "vulture": []
+  },
+
+  "vulture": {
+    "targets": ["."],
+    "venv_path": null,
+    "exclude": ".venv,__pycache__",
+    "whitelist": null
+  },
+
+  "eslint": {
+    "directory": ".",
+    "args": ["src/", "--format", "json", "--no-warn-ignored"]
+  },
+
+  "knip": {
+    "directory": "."
+  }
+}
