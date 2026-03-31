@@ -1,0 +1,6 @@
+# Build artifacts
+src/swarm_lint.egg-info/
+# Virtual environment
+.venv/
+# Pycache
+__pycache__/

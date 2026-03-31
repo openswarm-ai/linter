@@ -1,143 +1,152 @@
-# Code Quality Tools
+# swarm-lint
 
-This folder contains the project's code quality tooling: a structural linter, dead code detection, and type checking — covering both the Python backend and TypeScript frontend.
+Unified structural linter for Python + TypeScript projects. Runs multiple checks under one CLI:
 
-## What gets checked
+- **Structural checks** (pure Python, stdlib only) — file line count limits, folder item count limits, nested import detection
+- **Vulture** — dead Python code detection (shells out to `vulture`)
+- **ESLint** — TypeScript/React linting (shells out to local `node_modules/.bin/eslint`)
+- **Knip** — unused TypeScript exports, dependencies, and files (shells out to local `node_modules/.bin/knip`)
 
-### Structural rules
-
-**File length** — Every source file must be under 250 lines. Big files are hard to read, review, and maintain. If a file is getting long, it's a sign it should be split.
-
-**Folder size** — Every folder must contain fewer than 6 items. Keeping folders small forces you to organize code into logical groups.
-
-**Unused Python code (Vulture)** — Flags unused functions, classes, variables, and imports in the backend. Integrated into the linter's watch loop — findings appear as warnings in the Problems panel alongside structural errors. Only reports findings with >= 80% confidence to reduce noise.
-
-These rules apply to `.py`, `.ts`, `.tsx`, `.js`, and `.jsx` files.
-
-### Unused TypeScript code
-
-**Per-file (ESLint)** — Catches unused variables, parameters, and imports within each file. Runs in real-time through the VS Code ESLint extension.
-
-**Project-wide (Knip)** — Finds unused exports, unused files, and unused `package.json` dependencies across the entire frontend. Run manually or in CI.
-
-### Type checking
-
-**Python (Pyright/Pylance)** — Strict type checking for the backend, configured via `config/pyrightconfig.json`. Works through the Pylance extension in real-time.
-
-**TypeScript** — The `tsconfig.json` in `frontend/` has strict mode enabled. TypeScript errors show in the editor automatically.
-
-## How it runs
-
-### Linter watch (automatic)
-
-When you open the project in Cursor/VS Code, a background task starts watching for file changes. Every save re-checks the codebase. Violations show up in the **Problems panel** (`Cmd+Shift+M`).
+## Installation
 
 ```bash
-# one-shot check (exits with code 1 if violations exist)
-python3 linter/lint.py --root .
+pip install swarm-lint
 
-# continuous watch mode
-python3 linter/lint.py --watch --root .
+# with optional extras
+pip install "swarm-lint[watch]"    # adds --watch mode (watchfiles)
+pip install "swarm-lint[vulture]"  # adds vulture dead-code detection
+pip install "swarm-lint[all]"      # both of the above
 ```
 
-### ESLint (automatic)
-
-The VS Code ESLint extension picks up `frontend/eslint.config.mjs` and shows errors inline as you type. To run from the terminal:
+## Quick start
 
 ```bash
-cd frontend
+# scaffold a .swarm-lint.json config in your project
+swarm-lint init --root /path/to/project
 
-# check for problems
-npm run lint
+# run all checks once
+swarm-lint check --root /path/to/project
 
-# auto-fix what's possible
-npm run lint:fix
+# watch mode — re-checks on every file save
+swarm-lint --watch --root /path/to/project
 ```
 
-### Knip (manual / CI)
+## CLI reference
 
-```bash
-cd frontend
-npm run knip
+```
+swarm-lint [check] [--root DIR] [--config FILE] [--watch] [--no-color]
+swarm-lint init    [--root DIR] [--with-tasks] [--with-pyright] [--with-whitelist]
 ```
 
-Or use the `knip:check` VS Code task (`Cmd+Shift+P` → "Run Task" → "knip:check").
+| Flag | Description |
+|------|-------------|
+| `--root DIR` | Project root directory (default: `.`) |
+| `--config FILE` | Explicit path to a JSON config file |
+| `--watch` | Watch for file changes and re-lint continuously |
+| `--no-color` | Disable colored terminal output |
+
+### `swarm-lint init`
+
+Scaffolds a `.swarm-lint.json` config file into the target directory. Optional flags:
+
+| Flag | Creates |
+|------|---------|
+| `--with-tasks` | `.vscode/tasks.json` with problem-matcher integration |
+| `--with-pyright` | `pyrightconfig.json` template |
+| `--with-whitelist` | `vulture_whitelist.py` stub |
+
+The command is non-destructive — it skips files that already exist.
 
 ## Configuration
 
-### config/config.json
+swarm-lint looks for config in this order:
+
+1. `--config` flag (explicit path)
+2. `.swarm-lint.json` in the `--root` directory
+3. Built-in defaults
+
+Your config is **deep-merged** on top of defaults — you only need to override what differs from the defaults.
+
+### Example `.swarm-lint.json`
 
 ```json
 {
-  "enabled": {
-    "max-file-lines": true,    // toggle each check on/off
-    "max-folder-items": true,
-    "no-nested-imports": true,
-    "vulture": true,
-    "eslint": true,
-    "knip": true
-  },
   "rules": {
-    "max-file-lines": 250,     // files with >= this many lines trigger an error
-    "max-folder-items": 6,     // folders with >= this many items trigger an error
-    "vulture-min-confidence": 80,  // minimum confidence (0-100) to flag a finding
-    "vulture-error-threshold": 90  // confidence at which a finding becomes an error
+    "vulture-min-confidence": 1,
+    "vulture-error-threshold": 1
   },
-  "include_extensions": [".py", ".ts", ".tsx", ".js", ".jsx"],
-  "exclude": ["node_modules", ".venv", "..."],
-  "exceptions": {
-    "max-file-lines": [],      // glob patterns for exempt files
-    "max-folder-items": [],    // glob patterns for exempt folders
-    "vulture": []              // glob patterns for files vulture should ignore
+  "exclude": [
+    "node_modules", ".venv", "dist", "build", "__pycache__",
+    ".git", ".cursor", ".vscode",
+    "uv-bin", "data", "public"
+  ],
+  "vulture": {
+    "targets": ["backend", "debug.py"],
+    "venv_path": "backend/.venv",
+    "exclude": ".venv,__pycache__,data,uv-bin",
+    "whitelist": "vulture_whitelist.py"
+  },
+  "eslint": {
+    "directory": "frontend"
+  },
+  "knip": {
+    "directory": "frontend"
   }
 }
 ```
 
-Set any key in `"enabled"` to `false` to skip that check entirely. Missing keys default to `true`, so existing configs without the `"enabled"` section behave identically to before.
+### Config reference
 
-### Vulture whitelist
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled.*` | `bool` | `true` | Toggle individual checks on/off |
+| `rules.max-file-lines` | `int` | `250` | Max lines per source file |
+| `rules.max-folder-items` | `int` | `7` | Max items per folder |
+| `rules.vulture-min-confidence` | `int` | `80` | Min confidence to flag a vulture finding |
+| `rules.vulture-error-threshold` | `int` | `90` | Confidence at which a finding becomes an error |
+| `rules.no-nested-imports` | `bool` | `true` | Detect imports inside function bodies |
+| `include_extensions` | `list[str]` | `[".py", ".ts", ...]` | File extensions to check |
+| `exclude` | `list[str]` | `["node_modules", ...]` | Glob patterns for excluded dirs/files |
+| `exceptions.<rule>` | `list[str]` | `[]` | Glob patterns for files exempt from a rule |
+| `vulture.targets` | `list[str]` | `["."]` | Paths to scan (relative to root) |
+| `vulture.venv_path` | `str\|null` | `null` | Venv dir containing `bin/vulture` |
+| `vulture.exclude` | `str` | `".venv,__pycache__"` | Comma-separated vulture exclusions |
+| `vulture.whitelist` | `str\|null` | `null` | Path to whitelist file (relative to root) |
+| `eslint.directory` | `str` | `"."` | Directory containing `node_modules/.bin/eslint` |
+| `eslint.args` | `list[str]` | `["src/", ...]` | Arguments passed to eslint |
+| `knip.directory` | `str` | `"."` | Directory containing `node_modules/.bin/knip` |
 
-`config/vulture_whitelist.py` suppresses false positives — symbols used by frameworks, entry points, or external consumers that vulture can't detect statically. Add bare names to the file to mark them as intentionally used.
+## VS Code integration
 
-### ESLint
+Run `swarm-lint init --with-tasks` to create a `.vscode/tasks.json` that:
 
-`frontend/eslint.config.mjs` — flat config format (ESLint v9). The key rule for unused code is `@typescript-eslint/no-unused-vars`. Prefix a variable with `_` to suppress the warning.
+- Auto-starts `swarm-lint --watch` when the workspace opens
+- Feeds errors into the **Problems panel** via problem matchers
+- Groups errors by check type (structural, vulture, eslint, knip)
 
-### Knip
+## Output format
 
-`frontend/knip.json` — Knip auto-detects entry points from `webpack.config.js`. The `project` field tells it which files to analyze.
+Every error line matches: `file:line:col: severity: message [rule-tag]`
 
-## Adding exceptions
+Sections are delimited by `<name>: checking...` and `<name>: done. N error(s) found.` lines. This format is stable and consumed by VS Code problem matchers.
 
-If a file legitimately needs to exceed a limit, add a glob to the `exceptions` list in `config/config.json`:
+## External tools
 
-```json
-{
-  "exceptions": {
-    "max-file-lines": ["backend/tests/test_analytics.py"],
-    "max-folder-items": ["backend/apps/agents"],
-    "vulture": ["backend/legacy/*"]
-  }
-}
+swarm-lint shells out to these tools when their checks are enabled. Install them yourself:
+
+- **vulture** — `pip install vulture` (or use the `swarm-lint[vulture]` extra)
+- **eslint** — `npm install eslint` in your frontend directory
+- **knip** — `npm install knip` in your frontend directory
+
+## Development
+
+```bash
+git clone <repo-url>
+cd linter
+pip install -e ".[all]"
+swarm-lint check --root .
 ```
 
-Wildcards work: `"backend/tests/*"` exempts all files in the tests folder.
+## License
 
-## Folder structure
-
-```
-linter/
-  checks/              # check implementations
-    __init__.py        # shared filter/match utilities
-    structural.py      # file length, folder size, nested imports
-    vulture.py         # vulture dead-code runner
-    eslint.py          # eslint runner
-    knip.py            # knip unused-code runner
-  config/              # all configuration files
-    config.json        # enabled checks, rules, exclusions, exceptions
-    pyrightconfig.json # python type checking config
-    vulture_whitelist.py # false positive suppressions for vulture
-  lint.py              # orchestrator (loads config, runs checks, outputs results)
-  print_errors.sh      # colored terminal reporter
-  README.md
-```
+MIT
