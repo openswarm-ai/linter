@@ -130,7 +130,8 @@ def print_results(
 def watch_loop(root: Path, config: dict[str, Any], *, color: bool) -> None:
     from watchfiles import watch, DefaultFilter  # noqa: nested — optional dep
 
-    config_file = root / ".swarm-lint.json"
+    from swarm_lint.init_cmd import CONFIG_DIR, CONFIG_FILE
+    config_file = root / CONFIG_DIR / CONFIG_FILE
 
     print_results(*run_checks(root, config), color=color)
 
@@ -223,12 +224,12 @@ def setup(
 def init_cmd(
     root: str = typer.Option(".", help="Target directory"),
     with_tasks: bool = typer.Option(False, "--with-tasks/--without-tasks", help="Also create .vscode/tasks.json"),
-    with_pyright: bool = typer.Option(False, "--with-pyright/--without-pyright", help="Also create pyrightconfig.json"),
+    with_pyright: bool = typer.Option(False, "--with-pyright/--without-pyright", help="Also create pyright-config.json"),
     with_whitelist: bool = typer.Option(
         False, "--with-whitelist/--without-whitelist", help="Also create vulture_whitelist.py",
     ),
 ) -> None:
-    """Scaffold a .swarm-lint.json config file (non-interactive)."""
+    """Scaffold a general-config.json config file (non-interactive)."""
     from swarm_lint.init_cmd import run_init
     run_init(
         root=Path(root).resolve(),

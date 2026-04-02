@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swarm-lint"
-version = "0.1.0"
+version = "0.1.4"
 description = "Unified structural linter for Python + TypeScript projects"
 readme = "README.md"
 license = "MIT"

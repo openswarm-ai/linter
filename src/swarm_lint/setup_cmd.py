@@ -26,7 +26,7 @@ CHECKS: dict[str, str] = {
 SKIP_DIRS = frozenset({
     "node_modules", "__pycache__", "dist", "build", ".venv", "venv",
     ".git", ".cursor", ".vscode", ".tox", ".mypy_cache", ".pytest_cache",
-    "env", ".egg-info", "site-packages",
+    "env", ".egg-info", "site-packages", "swarm-lint-config",
 })
 
 
@@ -93,14 +93,15 @@ def _find_node_modules(root: Path) -> list[str]:
     return dirs
 
 
-def _scaffold_file(root: Path, subpath: str, dest: Path) -> None:
+def _scaffold_file(root: Path, subpath: str, dest: Path, *, overwrite: bool = False) -> None:
     from swarm_lint.init_cmd import _pkg_text
-    if dest.exists():
+    if dest.exists() and not overwrite:
         console.print(f"  [yellow]skip[/yellow] {dest.relative_to(root)} already exists")
         return
+    verb = "Updated" if dest.exists() else "Created"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(_pkg_text(subpath), encoding="utf-8")
-    console.print(f"  [green]\u2713[/green] Created [bold]{dest.relative_to(root)}[/bold]")
+    console.print(f"  [green]\u2713[/green] {verb} [bold]{dest.relative_to(root)}[/bold]")
 
 
 def run_setup(root: Path) -> None:
@@ -215,8 +216,8 @@ def run_setup(root: Path) -> None:
     # --- scaffold extras ---
     console.print()
     scaffold_choices = [
-        questionary.Choice(".vscode/tasks.json  \u2014 auto-run lint on workspace open", value="tasks", checked=True),
-        questionary.Choice("pyrightconfig.json  \u2014 Python type checking template", value="pyright", checked=False),
+        questionary.Choice(".vscode/ (tasks.json + extensions.json) \u2014 VS Code integration", value="tasks", checked=True),
+        questionary.Choice("pyright-config.json  \u2014 Python type checking template", value="pyright", checked=False),
         questionary.Choice("vulture_whitelist.py \u2014 false-positive suppressions", value="whitelist", checked=False),
     ]
     scaffolds: list[str] = _ask(questionary.checkbox(
@@ -225,27 +226,31 @@ def run_setup(root: Path) -> None:
     ).ask())
 
     # --- write config ---
-    config_path = root / ".swarm-lint.json"
+    from swarm_lint.init_cmd import CONFIG_DIR, CONFIG_FILE
+    cfg_dir = root / CONFIG_DIR
+    config_path = cfg_dir / CONFIG_FILE
     console.print()
 
     if config_path.exists():
         overwrite = _ask(questionary.confirm(
-            f"{config_path.name} already exists. Overwrite?",
+            f"{CONFIG_DIR}/{CONFIG_FILE} already exists. Overwrite?",
             default=False,
         ).ask())
         if not overwrite:
             _abort()
 
+    cfg_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    console.print(f"  [green]\u2713[/green] Created [bold].swarm-lint.json[/bold]")
+    console.print(f"  [green]\u2713[/green] Created [bold]{CONFIG_DIR}/{CONFIG_FILE}[/bold]")
 
     # --- scaffold extra files ---
     if "tasks" in scaffolds:
-        _scaffold_file(root, "templates/tasks.json", root / ".vscode" / "tasks.json")
+        _scaffold_file(root, "templates/tasks.json", root / ".vscode" / "tasks.json", overwrite=True)
+        _scaffold_file(root, "templates/extensions.json", root / ".vscode" / "extensions.json", overwrite=True)
     if "pyright" in scaffolds:
-        _scaffold_file(root, "templates/pyrightconfig.json", root / "pyrightconfig.json")
+        _scaffold_file(root, "templates/pyrightconfig.json", cfg_dir / "pyright-config.json")
     if "whitelist" in scaffolds:
-        _scaffold_file(root, "defaults/vulture_whitelist.py", root / "vulture_whitelist.py")
+        _scaffold_file(root, "defaults/vulture_whitelist.py", cfg_dir / "vulture_whitelist.py")
 
     console.print()
     console.print("[bold green]Done![/bold green] Run [bold]swarm-lint check[/bold] to lint your project.")

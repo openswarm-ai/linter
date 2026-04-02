@@ -30,14 +30,16 @@ def load_config(root: Path, explicit_config: Path | None = None) -> dict[str, An
 
     Priority (highest to lowest):
         1. *explicit_config* (``--config`` CLI flag)
-        2. ``.swarm-lint.json`` in *root*
+        2. ``swarm-lint-config/general-config.json`` in *root*
         3. Bundled defaults
     """
+    from swarm_lint.init_cmd import CONFIG_DIR, CONFIG_FILE
+
     base = load_defaults()
     if explicit_config is not None:
         override = json.loads(explicit_config.read_text())
     else:
-        project_cfg = root / ".swarm-lint.json"
+        project_cfg = root / CONFIG_DIR / CONFIG_FILE
         if project_cfg.exists():
             override = json.loads(project_cfg.read_text())
         else:

@@ -4,8 +4,8 @@
     {
       "label": "lint:watch",
       "type": "shell",
-      "command": "swarm-lint",
-      "args": ["--watch", "--root", "${workspaceFolder}"],
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "swarm_lint", "--watch", "--root", "${workspaceFolder}"],
       "isBackground": true,
       "runOptions": { "runOn": "folderOpen" },
       "problemMatcher": [

@@ -61,15 +61,15 @@ Running `swarm-lint` with no subcommand is equivalent to `swarm-lint check`.
 swarm-lint init [--root DIR] [--with-tasks] [--with-pyright] [--with-whitelist]
 ```
 
-Non-interactive scaffolding — drops a `.swarm-lint.json` config file into the target directory. Optional flags:
+Non-interactive scaffolding — creates a `swarm-lint-config/` folder with a `general-config.json` config file. Optional flags:
 
 | Flag | Creates |
 |------|---------|
-| `--with-tasks` | `.vscode/tasks.json` with problem-matcher integration |
-| `--with-pyright` | `pyrightconfig.json` template |
-| `--with-whitelist` | `vulture_whitelist.py` stub |
+| `--with-tasks` | `.vscode/tasks.json` + `.vscode/extensions.json` |
+| `--with-pyright` | `swarm-lint-config/pyright-config.json` template |
+| `--with-whitelist` | `swarm-lint-config/vulture_whitelist.py` stub |
 
-The command is non-destructive — it skips files that already exist.
+The `.vscode/` files are always overwritten to stay in sync with swarm-lint. Other scaffolded files are skipped if they already exist.
 
 ### `swarm-lint config`
 
@@ -93,12 +93,12 @@ swarm-lint config disable eslint
 swarm-lint looks for config in this order:
 
 1. `--config` flag (explicit path)
-2. `.swarm-lint.json` in the `--root` directory
+2. `swarm-lint-config/general-config.json` in the `--root` directory
 3. Built-in defaults
 
 Your config is **deep-merged** on top of defaults — you only need to override what differs from the defaults.
 
-### Example `.swarm-lint.json`
+### Example `swarm-lint-config/general-config.json`
 
 ```json
 {
@@ -108,14 +108,14 @@ Your config is **deep-merged** on top of defaults — you only need to override 
   },
   "exclude": [
     "node_modules", ".venv", "dist", "build", "__pycache__",
-    ".git", ".cursor", ".vscode",
+    ".git", ".cursor", ".vscode", "swarm-lint-config",
     "uv-bin", "data", "public"
   ],
   "vulture": {
     "targets": ["backend", "debug.py"],
     "venv_path": "backend/.venv",
     "exclude": ".venv,__pycache__,data,uv-bin",
-    "whitelist": "vulture_whitelist.py"
+    "whitelist": "swarm-lint-config/vulture_whitelist.py"
   },
   "eslint": {
     "directory": "frontend"
@@ -149,11 +149,12 @@ Your config is **deep-merged** on top of defaults — you only need to override 
 
 ## VS Code integration
 
-Run `swarm-lint setup` (or `swarm-lint init --with-tasks`) to create a `.vscode/tasks.json` that:
+Run `swarm-lint setup` (or `swarm-lint init --with-tasks`) to create `.vscode/tasks.json` and `.vscode/extensions.json`:
 
-- Auto-starts `swarm-lint --watch` when the workspace opens
-- Feeds errors into the **Problems panel** via problem matchers
-- Groups errors by check type (structural, vulture, eslint, knip)
+- **tasks.json** — auto-starts `swarm-lint --watch` when the workspace opens, feeds errors into the **Problems panel** via problem matchers, groups errors by check type (structural, vulture, eslint, knip)
+- **extensions.json** — recommends the ESLint VS Code extension
+
+These files are always overwritten on re-run to stay in sync with swarm-lint.
 
 ## Output format
 

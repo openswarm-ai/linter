@@ -11,8 +11,8 @@
   "rules": {
     "max-file-lines": 250,
     "max-folder-items": 7,
-    "vulture-min-confidence": 80,
-    "vulture-error-threshold": 90,
+    "vulture-min-confidence": 1,
+    "vulture-error-threshold": 1,
     "no-nested-imports": true
   },
 
@@ -26,7 +26,8 @@
     "__pycache__",
     ".git",
     ".cursor",
-    ".vscode"
+    ".vscode",
+    "swarm-lint-config"
   ],
 
   "exceptions": {

@@ -19,16 +19,22 @@ VALID_CHECKS = frozenset({
 })
 
 
+def _config_path(root: Path) -> Path:
+    from swarm_lint.init_cmd import CONFIG_DIR, CONFIG_FILE
+    return root / CONFIG_DIR / CONFIG_FILE
+
+
 def _load_user_config(root: Path) -> dict[str, Any]:
-    config_path = root / ".swarm-lint.json"
-    if config_path.exists():
-        return json.loads(config_path.read_text(encoding="utf-8"))
+    cp = _config_path(root)
+    if cp.exists():
+        return json.loads(cp.read_text(encoding="utf-8"))
     return {}
 
 
 def _save_user_config(root: Path, config: dict[str, Any]) -> None:
-    config_path = root / ".swarm-lint.json"
-    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    cp = _config_path(root)
+    cp.parent.mkdir(parents=True, exist_ok=True)
+    cp.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
 def _parse_value(raw: str) -> Any:
@@ -75,12 +81,12 @@ def show_config(root: Path) -> None:
         line_numbers=False,
     ))
 
-    config_path = root / ".swarm-lint.json"
+    cp = _config_path(root)
     console.print()
-    if config_path.exists():
-        console.print(f"[dim]Source: {config_path}  (merged with built-in defaults)[/dim]")
+    if cp.exists():
+        console.print(f"[dim]Source: {cp}  (merged with built-in defaults)[/dim]")
     else:
-        console.print("[dim]Source: built-in defaults (no .swarm-lint.json found)[/dim]")
+        console.print(f"[dim]Source: built-in defaults (no {cp.relative_to(root)} found)[/dim]")
 
 
 def set_config_value(root: Path, dot_key: str, raw_value: str) -> None:
