@@ -60,6 +60,32 @@
             "beginsPattern": "^knip: checking\\.\\.\\.$",
             "endsPattern": "^knip: done\\."
           }
+        },
+        {
+          "owner": "endpoints",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^(.+):(\\d+):(\\d+):\\s+(error|warning):\\s+(.+)$",
+            "file": 1, "line": 2, "column": 3, "severity": 4, "message": 5
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "^endpoints: checking\\.\\.\\.$",
+            "endsPattern": "^endpoints: done\\."
+          }
+        },
+        {
+          "owner": "classes",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^(.+):(\\d+):(\\d+):\\s+(error|warning):\\s+(.+)$",
+            "file": 1, "line": 2, "column": 3, "severity": 4, "message": 5
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "^classes: checking\\.\\.\\.$",
+            "endsPattern": "^classes: done\\."
+          }
         }
       ]
     }

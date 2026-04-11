@@ -3,9 +3,11 @@
 Unified structural linter for Python + TypeScript projects. Runs multiple checks under one CLI:
 
 - **Structural checks** (pure Python, stdlib only) — file line count limits, folder item count limits, nested import detection
-- **Vulture** — dead Python code detection (shells out to `vulture`)
+- **Vulture** — dead Python code detection (shells out to `vulture`), with class-body filtering
 - **ESLint** — TypeScript/React linting (shells out to local `node_modules/.bin/eslint`)
 - **Knip** — unused TypeScript exports, dependencies, and files (shells out to local `node_modules/.bin/knip`)
+- **Endpoints** — orphaned API route detection (cross-references backend routes with frontend/backend usage)
+- **Classes** — class-level dead code detection with Pydantic/framework awareness
 
 ## Installation
 
@@ -32,6 +34,9 @@ swarm-lint check --root /path/to/project
 
 # watch mode — re-checks on every file save
 swarm-lint check --watch --root /path/to/project
+
+# human-friendly grouped summary instead of VS Code output
+swarm-lint check --format summary --root /path/to/project
 ```
 
 ## CLI reference
@@ -43,7 +48,7 @@ Interactive wizard that auto-detects your project structure (Python dirs, TypeSc
 ### `swarm-lint check`
 
 ```
-swarm-lint check [--root DIR] [--config FILE] [--watch/--no-watch] [--color/--no-color]
+swarm-lint check [--root DIR] [--config FILE] [--watch/--no-watch] [--color/--no-color] [--format FORMAT]
 ```
 
 | Flag | Description |
@@ -52,6 +57,7 @@ swarm-lint check [--root DIR] [--config FILE] [--watch/--no-watch] [--color/--no
 | `--config FILE` | Explicit path to a JSON config file |
 | `--watch` | Watch for file changes and re-lint continuously |
 | `--no-color` | Disable colored terminal output |
+| `--format FORMAT` | Output format: `default` (VS Code-compatible) or `summary` (human-friendly grouped output) |
 
 Running `swarm-lint` with no subcommand is equivalent to `swarm-lint check`.
 
@@ -86,6 +92,7 @@ swarm-lint config set vulture.venv_path backend/.venv
 # toggle checks on/off
 swarm-lint config enable vulture
 swarm-lint config disable eslint
+swarm-lint config enable endpoints
 ```
 
 ## Configuration
@@ -104,7 +111,8 @@ Your config is **deep-merged** on top of defaults — you only need to override 
 {
   "rules": {
     "vulture-min-confidence": 1,
-    "vulture-error-threshold": 1
+    "vulture-error-threshold": 1,
+    "endpoint-ignore-routes": ["*/callback", "*/callback/*"]
   },
   "exclude": [
     "node_modules", ".venv", "dist", "build", "__pycache__",
@@ -122,6 +130,13 @@ Your config is **deep-merged** on top of defaults — you only need to override 
   },
   "knip": {
     "directory": "frontend"
+  },
+  "endpoints": {
+    "backend_dir": "backend",
+    "frontend_src_dir": "frontend/src"
+  },
+  "classes": {
+    "directory": "backend"
   }
 }
 ```
@@ -133,9 +148,10 @@ Your config is **deep-merged** on top of defaults — you only need to override 
 | `enabled.*` | `bool` | `true` | Toggle individual checks on/off |
 | `rules.max-file-lines` | `int` | `250` | Max lines per source file |
 | `rules.max-folder-items` | `int` | `7` | Max items per folder |
-| `rules.vulture-min-confidence` | `int` | `80` | Min confidence to flag a vulture finding |
-| `rules.vulture-error-threshold` | `int` | `90` | Confidence at which a finding becomes an error |
+| `rules.vulture-min-confidence` | `int` | `1` | Min confidence to flag a vulture finding |
+| `rules.vulture-error-threshold` | `int` | `1` | Confidence at which a finding becomes an error |
 | `rules.no-nested-imports` | `bool` | `true` | Detect imports inside function bodies |
+| `rules.endpoint-ignore-routes` | `list[str]` | `[]` | Route glob patterns to skip in endpoint checks |
 | `include_extensions` | `list[str]` | `[".py", ".ts", ...]` | File extensions to check |
 | `exclude` | `list[str]` | `["node_modules", ...]` | Glob patterns for excluded dirs/files |
 | `exceptions.<rule>` | `list[str]` | `[]` | Glob patterns for files exempt from a rule |
@@ -143,24 +159,47 @@ Your config is **deep-merged** on top of defaults — you only need to override 
 | `vulture.venv_path` | `str\|null` | `null` | Venv dir containing `bin/vulture` |
 | `vulture.exclude` | `str` | `".venv,__pycache__"` | Comma-separated vulture exclusions |
 | `vulture.whitelist` | `str\|null` | `null` | Path to whitelist file (relative to root) |
+| `vulture.ignore_decorators` | `str` | `"@*.router.*,..."` | Comma-separated decorator patterns for `--ignore-decorators` |
+| `vulture.ignore_names` | `str` | `"cls"` | Comma-separated name patterns for `--ignore-names` |
 | `eslint.directory` | `str` | `"."` | Directory containing `node_modules/.bin/eslint` |
 | `eslint.args` | `list[str]` | `["src/", ...]` | Arguments passed to eslint |
 | `knip.directory` | `str` | `"."` | Directory containing `node_modules/.bin/knip` |
+| `endpoints.backend_dir` | `str` | `"backend"` | Directory containing Python route files |
+| `endpoints.frontend_src_dir` | `str` | `"frontend/src"` | Directory containing TS/JS source that references routes |
+| `classes.directory` | `str` | `"backend"` | Directory to scan for Python class files |
 
 ## VS Code integration
 
 Run `swarm-lint setup` (or `swarm-lint init --with-tasks`) to create `.vscode/tasks.json` and `.vscode/extensions.json`:
 
-- **tasks.json** — auto-starts `swarm-lint --watch` when the workspace opens, feeds errors into the **Problems panel** via problem matchers, groups errors by check type (structural, vulture, eslint, knip)
+- **tasks.json** — auto-starts `swarm-lint --watch` when the workspace opens, feeds errors into the **Problems panel** via problem matchers, groups errors by check type (structural, vulture, eslint, knip, endpoints, classes)
 - **extensions.json** — recommends the ESLint VS Code extension
 
 These files are always overwritten on re-run to stay in sync with swarm-lint.
 
 ## Output format
 
-Every error line matches: `file:line:col: severity: message [rule-tag]`
+### Default format (`--format default`)
+
+Every error line matches: `file:line:col: severity: [rule-tag] message`
 
 Sections are delimited by `<name>: checking...` and `<name>: done. N error(s) found.` lines. This format is stable and consumed by VS Code problem matchers.
+
+### Summary format (`--format summary`)
+
+Groups errors by category, only shows categories with errors, and includes actionable hints:
+
+```
+[vulture] Dead code found:
+  backend/foo.py:12:1: error: [vulture] unused function 'bar' (100% confidence)
+  1 finding(s) -- fix or add to vulture_whitelist.py
+
+[endpoints] Orphaned endpoints found:
+  backend/apps/tools/routes.py:45:1: warning: [endpoints] orphaned endpoint 'list_tools' ...
+  1 finding(s) -- fix or add to endpoint exceptions
+
+2 total finding(s).
+```
 
 ## External tools
 

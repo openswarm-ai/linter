@@ -21,6 +21,8 @@ CHECKS: dict[str, str] = {
     "vulture": "Vulture: dead Python code detection",
     "eslint": "ESLint: TypeScript/React linting",
     "knip": "Knip: unused TS exports/deps/files",
+    "endpoints": "Endpoints: orphaned API route detection",
+    "classes": "Classes: class-level dead code detection",
 }
 
 SKIP_DIRS = frozenset({
@@ -134,9 +136,11 @@ def run_setup(root: Path) -> None:
     check_choices = []
     for key, label in CHECKS.items():
         checked = defaults["enabled"].get(key, True)
-        if key == "vulture" and not py_dirs:
+        if key in ("vulture", "classes") and not py_dirs:
             checked = False
         elif key in ("eslint", "knip") and not ts_dirs:
+            checked = False
+        elif key == "endpoints" and (not py_dirs or not ts_dirs):
             checked = False
         check_choices.append(questionary.Choice(label, value=key, checked=checked))
 
@@ -212,6 +216,31 @@ def run_setup(root: Path) -> None:
             }
         if "knip" in enabled_checks:
             config["knip"] = {"directory": fe_dir}
+
+    # --- endpoints / classes ---
+    if "endpoints" in enabled_checks or "classes" in enabled_checks:
+        console.print()
+        console.print("[bold]\u2500\u2500 Backend / Endpoint Configuration \u2500\u2500[/bold]")
+
+        be_default = py_dirs[0] if py_dirs else "backend"
+        be_dir = _ask(questionary.text(
+            "Backend directory (Python source with API routes):",
+            default=be_default,
+        ).ask())
+
+        if "endpoints" in enabled_checks:
+            fe_src_default = (ts_dirs[0] + "/src") if ts_dirs else "frontend/src"
+            fe_src = _ask(questionary.text(
+                "Frontend source directory (TS/JS files that reference routes):",
+                default=fe_src_default,
+            ).ask())
+            config["endpoints"] = {
+                "backend_dir": be_dir,
+                "frontend_src_dir": fe_src,
+            }
+
+        if "classes" in enabled_checks:
+            config["classes"] = {"directory": be_dir}
 
     # --- scaffold extras ---
     console.print()

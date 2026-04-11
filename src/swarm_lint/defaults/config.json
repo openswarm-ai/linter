@@ -5,7 +5,9 @@
     "no-nested-imports": true,
     "vulture": true,
     "eslint": true,
-    "knip": true
+    "knip": true,
+    "endpoints": true,
+    "classes": true
   },
 
   "rules": {
@@ -13,7 +15,8 @@
     "max-folder-items": 7,
     "vulture-min-confidence": 1,
     "vulture-error-threshold": 1,
-    "no-nested-imports": true
+    "no-nested-imports": true,
+    "endpoint-ignore-routes": []
   },
 
   "include_extensions": [".py", ".ts", ".tsx", ".js", ".jsx"],
@@ -34,14 +37,18 @@
     "max-file-lines": [],
     "max-folder-items": [],
     "no-nested-imports": [],
-    "vulture": []
+    "vulture": [],
+    "endpoints": [],
+    "classes": []
   },
 
   "vulture": {
     "targets": ["."],
     "venv_path": null,
     "exclude": ".venv,__pycache__",
-    "whitelist": null
+    "whitelist": null,
+    "ignore_decorators": "@*.router.*,@*.websocket,@pytest.fixture,@pytest.fixture*",
+    "ignore_names": "cls"
   },
 
   "eslint": {
@@ -51,5 +58,14 @@
 
   "knip": {
     "directory": "."
+  },
+
+  "endpoints": {
+    "backend_dir": "backend",
+    "frontend_src_dir": "frontend/src"
+  },
+
+  "classes": {
+    "directory": "backend"
   }
 }

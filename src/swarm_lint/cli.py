@@ -12,6 +12,8 @@ from swarm_lint.checks.structural import check_file_lines, check_folder_items, c
 from swarm_lint.checks.vulture import run_vulture
 from swarm_lint.checks.eslint import run_eslint
 from swarm_lint.checks.knip import run_knip
+from swarm_lint.checks.endpoints import run_endpoint_check
+from swarm_lint.checks.classes import run_class_check
 from swarm_lint.config import load_config
 
 YELLOW = "\033[33m"
@@ -28,9 +30,21 @@ def _supports_color() -> bool:
     return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
 
+_SECTION_NAMES = ("structural", "vulture", "eslint", "knip", "endpoints", "classes")
+
+_SECTION_META = {
+    "structural": {"color": YELLOW, "label": "Violations found", "hint": "fix or add exceptions in config"},
+    "vulture":    {"color": CYAN,   "label": "Dead code found",  "hint": "fix or add to vulture_whitelist.py"},
+    "eslint":     {"color": YELLOW, "label": "Lint errors found", "hint": "fix or disable rules in eslint config"},
+    "knip":       {"color": CYAN,   "label": "Unused code/dependencies found", "hint": "remove unused code or update knip config"},
+    "endpoints":  {"color": YELLOW, "label": "Orphaned endpoints found", "hint": "fix or add to endpoint exceptions"},
+    "classes":    {"color": CYAN,   "label": "Class issues found", "hint": "fix or add to class exceptions"},
+}
+
+
 def run_checks(
     root: Path, config: dict[str, Any],
-) -> tuple[list[str], list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], list[str], list[str], list[str]]:
     enabled: dict[str, bool] = config.get("enabled", {})
     rules: dict[str, int] = config["rules"]
     excludes: list[str] = config["exclude"]
@@ -94,13 +108,32 @@ def run_checks(
     if enabled.get("knip", True):
         knip_errors = run_knip(root, knip_config=config.get("knip", {}))
 
-    return sorted(structural_errors), sorted(vulture_errors), sorted(eslint_errors), sorted(knip_errors)
+    endpoint_errors: list[str] = []
+    if enabled.get("endpoints", True):
+        ignore_routes: list[str] = rules.get("endpoint-ignore-routes", [])
+        endpoint_errors = run_endpoint_check(
+            root, exceptions, ignore_routes,
+            endpoints_config=config.get("endpoints", {}),
+        )
+
+    class_errors: list[str] = []
+    if enabled.get("classes", True):
+        class_errors = run_class_check(
+            root, exceptions, excludes,
+            classes_config=config.get("classes", {}),
+        )
+
+    return (
+        sorted(structural_errors), sorted(vulture_errors),
+        sorted(eslint_errors), sorted(knip_errors),
+        sorted(endpoint_errors), sorted(class_errors),
+    )
 
 
 def _print_section(name: str, errors: list[str], color: bool) -> None:
     """Print a check section preserving the output format contract.
 
-    The exact format of the 'checking...' / 'done.' lines must not change —
+    The exact format of the 'checking...' / 'done.' lines must not change --
     VS Code problem matchers depend on them.
     """
     if color:
@@ -117,23 +150,51 @@ def _print_section(name: str, errors: list[str], color: bool) -> None:
 
 
 def print_results(
-    structural_errors: list[str], vulture_errors: list[str],
-    eslint_errors: list[str], knip_errors: list[str],
+    results: tuple[list[str], ...],
     *, color: bool = False,
 ) -> None:
-    _print_section("structural", structural_errors, color)
-    _print_section("vulture", vulture_errors, color)
-    _print_section("eslint", eslint_errors, color)
-    _print_section("knip", knip_errors, color)
+    """Machine-parseable output (default format, VS Code-compatible)."""
+    for name, errors in zip(_SECTION_NAMES, results):
+        _print_section(name, errors, color)
 
 
-def watch_loop(root: Path, config: dict[str, Any], *, color: bool) -> None:
-    from watchfiles import watch, DefaultFilter  # noqa: nested — optional dep
+def print_summary(
+    results: tuple[list[str], ...],
+    *, color: bool = False,
+) -> None:
+    """Human-friendly grouped summary (--format summary)."""
+    for name, errors in zip(_SECTION_NAMES, results):
+        if not errors:
+            continue
+        meta = _SECTION_META[name]
+        c = meta["color"] if color else ""
+        b = BOLD if color else ""
+        r = RESET if color else ""
+        print(f"\n{c}{b}[{name}] {meta['label']}:{r}", flush=True)
+        for e in errors:
+            print(f"{c}  {e}{r}", flush=True)
+        print(f"{c}{b}  {len(errors)} finding(s) -- {meta['hint']}{r}", flush=True)
+    total = sum(len(e) for e in results)
+    if total == 0:
+        print("\nAll checks passed.", flush=True)
+    else:
+        print(f"\n{total} total finding(s).", flush=True)
+
+
+def _output(results: tuple[list[str], ...], *, fmt: str, color: bool) -> None:
+    if fmt == "summary":
+        print_summary(results, color=color)
+    else:
+        print_results(results, color=color)
+
+
+def watch_loop(root: Path, config: dict[str, Any], *, color: bool, fmt: str) -> None:
+    from watchfiles import watch, DefaultFilter
 
     from swarm_lint.init_cmd import CONFIG_DIR, CONFIG_FILE
     config_file = root / CONFIG_DIR / CONFIG_FILE
 
-    print_results(*run_checks(root, config), color=color)
+    _output(run_checks(root, config), fmt=fmt, color=color)
 
     class SourceFilter(DefaultFilter):
         allowed_extensions = (".py", ".ts", ".tsx", ".js", ".jsx")
@@ -150,7 +211,7 @@ def watch_loop(root: Path, config: dict[str, Any], *, color: bool) -> None:
 
     for _changes in watch(root, watch_filter=SourceFilter()):
         config = load_config(root)
-        print_results(*run_checks(root, config), color=color)
+        _output(run_checks(root, config), fmt=fmt, color=color)
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +233,7 @@ def _run_check(
     config_path: Optional[str],
     watch: bool,
     color: bool,
+    fmt: str,
 ) -> None:
     root = Path(root_str).resolve()
     explicit_config = Path(config_path) if config_path else None
@@ -179,10 +241,10 @@ def _run_check(
     use_color = color and _supports_color()
 
     if watch:
-        watch_loop(root, cfg, color=use_color)
+        watch_loop(root, cfg, color=use_color, fmt=fmt)
     else:
         results = run_checks(root, cfg)
-        print_results(*results, color=use_color)
+        _output(results, fmt=fmt, color=use_color)
         raise typer.Exit(code=1 if any(results) else 0)
 
 
@@ -193,11 +255,12 @@ def _main(
     config: Optional[str] = typer.Option(None, help="Path to config JSON file"),
     watch: bool = typer.Option(False, "--watch/--no-watch", help="Watch for file changes and re-lint"),
     color: bool = typer.Option(True, "--color/--no-color", help="Colored terminal output"),
+    fmt: str = typer.Option("default", "--format", help="Output format: 'default' (VS Code) or 'summary' (human-friendly)"),
 ) -> None:
     """Unified structural linter for Python + TypeScript projects."""
     if ctx.invoked_subcommand is not None:
         return
-    _run_check(root, config, watch, color)
+    _run_check(root, config, watch, color, fmt)
 
 
 @app.command()
@@ -206,9 +269,10 @@ def check(
     config: Optional[str] = typer.Option(None, help="Path to config JSON file"),
     watch: bool = typer.Option(False, "--watch/--no-watch", help="Watch for file changes and re-lint"),
     color: bool = typer.Option(True, "--color/--no-color", help="Colored terminal output"),
+    fmt: str = typer.Option("default", "--format", help="Output format: 'default' (VS Code) or 'summary' (human-friendly)"),
 ) -> None:
     """Run lint checks (default when no subcommand is given)."""
-    _run_check(root, config, watch, color)
+    _run_check(root, config, watch, color, fmt)
 
 
 @app.command()

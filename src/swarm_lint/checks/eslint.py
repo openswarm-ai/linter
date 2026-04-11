@@ -47,6 +47,6 @@ def run_eslint(root: Path, eslint_config: dict) -> list[str]:
             rule = msg.get("ruleId") or "unknown"
             errors.append(
                 f"{rel}:{msg.get('line', 1)}:{msg.get('column', 1)}: "
-                f"{sev}: {text} [{rule}] [eslint]"
+                f"{sev}: [eslint] {text} ({rule})"
             )
     return errors

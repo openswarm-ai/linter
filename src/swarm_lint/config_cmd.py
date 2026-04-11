@@ -15,7 +15,7 @@ console = Console()
 
 VALID_CHECKS = frozenset({
     "max-file-lines", "max-folder-items", "no-nested-imports",
-    "vulture", "eslint", "knip",
+    "vulture", "eslint", "knip", "endpoints", "classes",
 })
 
 

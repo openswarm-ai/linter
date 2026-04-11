@@ -1,13 +1,43 @@
-"""Vulture dead-code detection runner."""
+"""Vulture dead-code detection runner.
+
+Class-body findings (fields, methods inside a class) are filtered out here
+and handled separately by checks/classes.py which understands Pydantic.
+"""
 
 from __future__ import annotations
 
+import ast
 import re
 import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 from . import is_excepted
+
+
+@lru_cache(maxsize=64)
+def _class_line_ranges(filepath: str) -> list[tuple[int, int]]:
+    """Return (start, end) line ranges for all class bodies in *filepath*."""
+    try:
+        tree = ast.parse(Path(filepath).read_text())
+    except (OSError, SyntaxError):
+        return []
+    ranges: list[tuple[int, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            end = max(getattr(n, "lineno", node.lineno) for n in ast.walk(node))
+            ranges.append((node.lineno, end))
+    return ranges
+
+
+def _is_inside_class(filepath: str, lineno: int) -> bool:
+    """True when *lineno* is strictly inside a class body.
+
+    The class declaration line itself (``class Foo:``) is *not* considered
+    inside, so vulture's "unused class" findings still pass through.
+    """
+    return any(start < lineno <= end for start, end in _class_line_ranges(filepath))
 
 
 def run_vulture(
@@ -20,10 +50,12 @@ def run_vulture(
     """Run vulture and return errors.
 
     vulture_config keys:
-        targets      – list of paths to scan (relative to root)
-        venv_path    – venv dir containing bin/vulture (relative to root), or None
-        exclude      – comma-separated exclusion string for vulture
-        whitelist    – path to whitelist file (relative to root), or None
+        targets           -- list of paths to scan (relative to root)
+        venv_path         -- venv dir containing bin/vulture (relative to root), or None
+        exclude           -- comma-separated exclusion string for vulture
+        whitelist         -- path to whitelist file (relative to root), or None
+        ignore_decorators -- comma-separated decorator patterns for --ignore-decorators
+        ignore_names      -- comma-separated name patterns for --ignore-names
     """
     vulture_bin: Path | None = None
     venv_path = vulture_config.get("venv_path")
@@ -52,6 +84,14 @@ def run_vulture(
     if exclude_str:
         cmd.extend(["--exclude", exclude_str])
 
+    ignore_decorators = vulture_config.get("ignore_decorators", "")
+    if ignore_decorators:
+        cmd.extend(["--ignore-decorators", ignore_decorators])
+
+    ignore_names = vulture_config.get("ignore_names", "")
+    if ignore_names:
+        cmd.extend(["--ignore-names", ignore_names])
+
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, cwd=str(root), timeout=30,
@@ -67,8 +107,10 @@ def run_vulture(
         filepath, lineno, message = m.groups()
         if is_excepted(filepath, "vulture", exceptions):
             continue
+        if _is_inside_class(str(root / filepath), int(lineno)):
+            continue
         conf = re.search(r"\((\d+)% confidence\)", message)
         confidence = int(conf.group(1)) if conf else 0
         severity = "error" if confidence >= error_threshold else "warning"
-        errors.append(f"{filepath}:{lineno}:1: {severity}: {message} [vulture]")
+        errors.append(f"{filepath}:{lineno}:1: {severity}: [vulture] {message}")
     return errors
